@@ -8,7 +8,7 @@ use std::{
 };
 
 use discord_rich_presence::{
-    activity::{Activity, Assets, Timestamps},
+    activity::{Activity, Assets, Button, Timestamps},
     DiscordIpc, DiscordIpcClient,
 };
 use log::{debug, error, info, trace, warn};
@@ -49,6 +49,7 @@ struct ActivityFraming<'a> {
     /// `(start_s, Option<end_s>)`; absent when no timestamp should be sent.
     timing: Option<(u64, Option<u64>)>,
     cover_art_url: Option<&'a str>,
+    track_url: Option<&'a str>,
     player_config: &'a PlayerConfig,
     activity_type: ActivityType,
     status_display_type: StatusDisplayType,
@@ -1182,6 +1183,7 @@ impl Presence {
                 texts: &activity_texts,
                 timing: start_s.map(|s| (s, end_s)),
                 cover_art_url: cover_for_push,
+                track_url: track_url_ref,
                 player_config: &player_config,
                 activity_type,
                 status_display_type,
@@ -1259,6 +1261,8 @@ impl Presence {
             let read_cache_for_task = art_decision.read_cache;
             let cover_fetch_gen = Arc::clone(&self.cover_fetch_generation);
             let discord_activity_is_set_for_task = Arc::clone(&self.discord_activity_is_set);
+            let track_url_for_task = track_url.clone();
+
             // Always use the freshly-loaded generation (post-bump) so this task
             // self-cancels on any subsequent track change in either run mode.
             let fetch_gen = spawn_gen;
@@ -1336,6 +1340,7 @@ impl Presence {
                         texts: &texts_for_task,
                         timing: start_s.map(|s| (s, end_s)),
                         cover_art_url: Some(cover_url.as_str()),
+                        track_url: track_url_for_task.as_deref(),
                         player_config: &player_config_for_task,
                         activity_type,
                         status_display_type,
@@ -1446,6 +1451,15 @@ impl Presence {
                 assets = assets.large_text(&framing.texts.large_text);
             }
         }
+
+        if let Some(url) = framing.track_url {
+            if url.starts_with("http://") || url.starts_with("https://") {
+                activity = activity.buttons(vec![
+                    Button::new("Listen", url)
+                ]);
+            }
+        }
+
         activity = activity.assets(assets);
 
         activity
@@ -1752,6 +1766,7 @@ mod tests {
             texts: &texts,
             timing: None,
             cover_art_url: None,
+            track_url: None,
             player_config: &player_config,
             activity_type: ActivityType::Listening,
             status_display_type: StatusDisplayType::Name,
